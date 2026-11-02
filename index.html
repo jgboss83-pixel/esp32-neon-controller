@@ -20,6 +20,11 @@ small{color:#8c9dae;display:block;line-height:1.5;margin-top:10px}#log{font-size
 <h1>NEON SCROLLER</h1><div class="sub">Waveshare ESP32-S3-LCD-3.16 · Bluetooth LE</div>
 <div class="card"><div class="status"><strong>DISPLAY CONNECTION</strong><span class="pill" id="status">Disconnected</span></div>
 <button id="connect" class="primary">ᛒ Connect to Display</button><small>Open this HTTPS page in Bluefy on your iPhone. Turn on Bluetooth, then tap Connect.</small></div>
+<div class="card"><div class="row"><strong>BATTERY MONITOR</strong><span class="pill" id="batteryStatus">Waiting for BLE</span></div>
+<div class="row" style="margin-top:14px"><span style="font-size:2rem;font-weight:800;color:#9dffea" id="batteryPercent">—%</span><span id="batteryVoltage">— V</span></div>
+<div style="height:12px;background:#293c50;border-radius:20px;overflow:hidden;margin:12px 0"><div id="batteryBar" style="height:100%;width:0%;background:#9dffea;transition:width .3s"></div></div>
+<div class="row"><span>Battery level (estimated)</span><span id="batteryTrend">Monitoring…</span></div>
+<small id="batteryInfo">Readings every 10 seconds. Percentage is estimated from voltage; charging current and USB connection status are not measured.</small></div>
 <div class="card"><div class="sub">MESSAGE PREVIEW</div><div class="preview" id="preview">xH34D5H07x</div>
 <label for="message">Scrolling message (up to 120 characters)</label>
 <textarea id="message" maxlength="120">xH34D5H07x</textarea>
@@ -36,7 +41,8 @@ small{color:#8c9dae;display:block;line-height:1.5;margin-top:10px}#log{font-size
 'use strict';
 const SERVICE='76a40001-7891-4d0c-9f28-b20a85a6d351';
 const WRITE='76a40002-7891-4d0c-9f28-b20a85a6d351';
-let device=null, characteristic=null, chosenColor='#96BFB1', chosenBackground='#000000';
+const BATTERY='76a40003-7891-4d0c-9f28-b20a85a6d351';
+let device=null, characteristic=null, batteryCharacteristic=null, batteryHistory=[], chosenColor='#96BFB1', chosenBackground='#000000';
 const $=id=>document.getElementById(id);
 const log=msg=>{$('log').textContent=msg};
 const connected=()=>!!(device?.gatt?.connected && characteristic);
@@ -45,6 +51,22 @@ function refresh(){
  $('status').classList.toggle('connected',connected());
  $('send').disabled=!connected();
  $('connect').textContent=connected()?'Disconnect':'ᛒ Connect to Display';
+}
+function batteryChanged(event){
+ const raw=new TextDecoder().decode(event.target.value);
+ const match=/^V:(\d+),P:(-?\d+)$/.exec(raw);
+ if(!match)return;
+ const mv=Number(match[1]), percent=Number(match[2]);
+ if(percent<0){$('batteryStatus').textContent='Calibration needed';$('batteryPercent').textContent='—%';$('batteryVoltage').textContent='— V';return}
+ $('batteryStatus').textContent='Live';
+ $('batteryPercent').textContent=percent+'%';
+ $('batteryVoltage').textContent=(mv/1000).toFixed(2)+' V';
+ $('batteryBar').style.width=percent+'%';
+ const now=Date.now();batteryHistory.push({now,percent});
+ batteryHistory=batteryHistory.filter(x=>now-x.now<=60*60*1000);
+ const first=batteryHistory[0],elapsed=(now-first.now)/3600000;
+ const delta=percent-first.percent;
+ $('batteryTrend').textContent=(elapsed>=0.08&&Math.abs(delta)>=2)?((delta>0?'+':'')+(delta/elapsed).toFixed(1)+'%/hr (approx)'):'Trend pending';
 }
 function cleanMessage(v){return v.replace(/[^\x20-\x7e]/g,'').slice(0,120)}
 function preview(){ $('preview').textContent=$('message').value||' '; $('preview').style.color=chosenColor; $('preview').style.backgroundColor=chosenBackground}
@@ -55,10 +77,15 @@ $('connect').addEventListener('click',async()=>{
  try{
   log('Select NEON-SCROLLER from the Bluetooth list…');
   device=await navigator.bluetooth.requestDevice({filters:[{name:'NEON-SCROLLER'}],optionalServices:[SERVICE]});
-  device.addEventListener('gattserverdisconnected',()=>{characteristic=null;refresh();log('Disconnected')});
+  device.addEventListener('gattserverdisconnected',()=>{characteristic=null;batteryCharacteristic=null;refresh();$('batteryStatus').textContent='Disconnected';log('Disconnected')});
   const server=await device.gatt.connect();
   const service=await server.getPrimaryService(SERVICE);
   characteristic=await service.getCharacteristic(WRITE);
+  batteryCharacteristic=await service.getCharacteristic(BATTERY);
+  batteryCharacteristic.addEventListener('characteristicvaluechanged',batteryChanged);
+  await batteryCharacteristic.startNotifications();
+  const initial=await batteryCharacteristic.readValue();
+  batteryChanged({target:{value:initial}});
   refresh();log('Connected! Send a message.');
  }catch(err){log('Connection failed: '+err.message);refresh()}
 });
