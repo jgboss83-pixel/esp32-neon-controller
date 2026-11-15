@@ -25,11 +25,18 @@ small{color:#8c9dae;display:block;line-height:1.5;margin-top:10px}#log{font-size
 <div style="height:12px;background:#293c50;border-radius:20px;overflow:hidden;margin:12px 0"><div id="batteryBar" style="height:100%;width:0%;background:#9dffea;transition:width .3s"></div></div>
 <div class="row"><span>Battery level (estimated)</span><span id="batteryTrend">Monitoring…</span></div>
 <small id="batteryInfo">Readings every 10 seconds. Percentage is estimated from voltage; charging current and USB connection status are not measured.</small></div>
-<div class="card"><div class="sub">MESSAGE PREVIEW</div><div class="preview" id="preview">xH34D5H07x</div>
+<div class="card"><div class="sub">MESSAGE PREVIEW</div><div class="preview" id="preview">FEED ME!!!</div>
 <label for="message">Scrolling message (up to 120 characters)</label>
-<textarea id="message" maxlength="120">xH34D5H07x</textarea>
+<textarea id="message" maxlength="120">FEED ME!!!</textarea>
 <button id="send" class="primary" disabled>Send Message</button><p id="log" role="status"></p></div>
 <div class="card"><strong>QUICK MESSAGES</strong><div class="grid" id="presets" style="margin-top:14px"></div></div>
+<div class="card"><strong>DISPLAY FONT</strong>
+<label for="fontChoice">Change font instantly over Bluetooth</label>
+<select id="fontChoice" style="width:100%;padding:14px;background:#07101c;color:#e8f7f5;border:1px solid #4a657b;border-radius:11px;font-size:1rem">
+<option value="0">Pixeled (default)</option>
+<option value="1">Pro Racing Slant Outline</option>
+<option value="2">Quentin Caps</option>
+</select><small>All three fonts are stored in ESP32 flash. You can switch without re-uploading.</small></div>
 <div class="card"><div class="row"><strong>SCROLL SPEED</strong><span id="speedValue">24 px/frame</span></div>
 <input type="range" id="speed" min="1" max="48" value="24" step="1"><small>Changes are sent when you release the slider.</small>
 <label>TEXT COLOR</label><div class="swatches" id="swatches"></div>
@@ -111,11 +118,16 @@ async function sendMessage(){
  finally{refresh()}
 }
 $('send').addEventListener('click',sendMessage);
-for(const preset of ['xH34D5H07x','CALL ME DADDY','ALLOY ASH','FEED ME!!!','HANGRY','BOSS']){
+for(const preset of ['fed :)','CALL ME DADDY','ALLOY ASH','FEED ME!!!','HANGRY','eff u >:(']){
  const b=document.createElement('button');b.textContent=preset;
  b.addEventListener('click',()=>{$('message').value=preset;preview();if(connected())sendMessage()});
  $('presets').appendChild(b);
 }
+$('fontChoice').addEventListener('change',async()=>{
+ if(!connected()){log('Connect to the display to change fonts');return}
+ try{await writePacket('F:'+$('fontChoice').value);log('Font changed to '+$('fontChoice').selectedOptions[0].text)}
+ catch(e){log('Font change failed: '+e.message)}
+});
 $('speed').addEventListener('input',()=>{$('speedValue').textContent=$('speed').value+' px/frame'});
 $('speed').addEventListener('change',async()=>{if(connected())try{await writePacket('S:'+$('speed').value);log('Speed updated')}catch(e){log(e.message)}});
 const controls={text:{picker:'customText',hex:'textHex',rgb:'textRgb',swatches:'swatches',command:'C:'},background:{picker:'customBackground',hex:'backgroundHex',rgb:'backgroundRgb',swatches:'backgroundSwatches',command:'G:'}};
